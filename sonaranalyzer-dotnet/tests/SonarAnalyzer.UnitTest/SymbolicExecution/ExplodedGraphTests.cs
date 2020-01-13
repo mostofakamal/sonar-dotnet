@@ -26,6 +26,7 @@ using csharp::SonarAnalyzer.LiveVariableAnalysis.CSharp;
 using FluentAssertions;
 using FluentAssertions.Execution;
 using Microsoft.CodeAnalysis;
+using Microsoft.CodeAnalysis.CSharp;
 using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.VisualStudio.TestTools.UnitTesting;
 using SonarAnalyzer.ControlFlowGraph;
@@ -818,6 +819,35 @@ namespace Namespace
             context.WalkWithInstructions(7);
         }
 
+        [TestMethod]
+        [TestCategory("Symbolic execution")]
+        public void ExplodedGraph_RefExpressions()
+        {
+            const string testInput = @"
+using System;
+
+namespace Test
+{
+    public class Program
+    {
+        public static Program Empty = new Program();
+        protected ref readonly Program Main() => ref Empty;
+    }
+}
+";
+            var context = new ExplodedGraphContext(TestHelper.Compile(testInput));
+            context.ExplodedGraph.InstructionProcessed +=
+                (sender, args) =>
+                {
+                    args.ProgramPoint.Block.Instructions.Should().HaveCount(2);
+                    args.ProgramPoint.Block.Instructions.Should().Contain(i => i.ToString() == "Empty");
+                    args.ProgramPoint.Block.Instructions.Should().Contain(i => i.ToString() == "ref Empty");
+                };
+
+            context.WalkWithInstructions(2);
+        }
+
+
         private class ExplodedGraphContext
         {
             public readonly SemanticModel SemanticModel;
@@ -849,7 +879,8 @@ namespace Namespace
                 this.MainMethod = mainMethod;
                 this.SemanticModel = semanticModel;
                 this.MainMethodSymbol = semanticModel.GetDeclaredSymbol(this.MainMethod) as IMethodSymbol;
-                this.ControlFlowGraph = CSharpControlFlowGraph.Create(this.MainMethod.Body, semanticModel);
+                var methodBody = (CSharpSyntaxNode)this.MainMethod.Body ?? this.MainMethod.ExpressionBody;
+                this.ControlFlowGraph = CSharpControlFlowGraph.Create(methodBody, semanticModel);
                 this.LiveVariableAnalysis = CSharpLiveVariableAnalysis.Analyze(this.ControlFlowGraph, this.MainMethodSymbol, semanticModel);
                 this.ExplodedGraph = new CSharpExplodedGraph(this.ControlFlowGraph, this.MainMethodSymbol, semanticModel, this.LiveVariableAnalysis);
                 this.ExplodedGraph.InstructionProcessed += (sender, args) => { this.NumberOfProcessedInstructions++; };
