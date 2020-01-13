@@ -538,6 +538,11 @@ namespace SonarAnalyzer.SymbolicExecution
                     newProgramState = newProgramState.PushValue(tupleSV);
                     break;
 
+                case SyntaxKindEx.RefExpression:
+                    // RefExpression is not yet supported: https://github.com/SonarSource/sonar-dotnet/issues/3024
+                    // Do nothing
+                    break;
+
                 default:
                     throw new NotSupportedException($"{instruction.Kind()}");
             }
